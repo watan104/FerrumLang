@@ -5,13 +5,14 @@
 #include "ast.h"
 #include "common.h"
 
+// Parser structure
 typedef struct {
-    Lexer* lexer;
-    Token current;
-    Token previous;
-    bool had_error;
-    bool panic_mode;
-    const char* filename;
+    Lexer* lexer;           // Lexer instance
+    const char* filename;    // Source file name
+    Token current;          // Current token
+    Token previous;         // Previous token
+    bool had_error;         // Error flag
+    bool panic_mode;        // Error recovery mode
 } Parser;
 
 typedef enum {
@@ -28,7 +29,7 @@ typedef enum {
     PREC_PRIMARY
 } Precedence;
 
-typedef void (*ParseFn)(Parser* parser, ASTNode* node);
+typedef void (*ParseFn)(Parser* parser, ASTNode** node, bool can_assign);
 
 typedef struct {
     ParseFn prefix;
@@ -36,25 +37,25 @@ typedef struct {
     Precedence precedence;
 } ParseRule;
 
-// Parser API
+// Parser functions
 void parser_init(Parser* parser, Lexer* lexer, const char* filename);
 ASTNode* parse(Parser* parser);
 
-// Yardımcı fonksiyonlar
+// Helper functions
 void advance(Parser* parser);
 void consume(Parser* parser, TokenType type, const char* message);
 bool match(Parser* parser, TokenType type);
 bool check(Parser* parser, TokenType type);
 
 // Expression parsing
-ASTNode* parse_expression(Parser* parser);
-ASTNode* parse_precedence(Parser* parser, Precedence precedence);
+void parse_expression(Parser* parser, ASTNode** node, bool can_assign);
+void parse_precedence(Parser* parser, Precedence precedence, ASTNode** node, bool can_assign);
 
 // Statement parsing
-ASTNode* parse_statement(Parser* parser);
-ASTNode* parse_block(Parser* parser);
-ASTNode* parse_var_declaration(Parser* parser);
-ASTNode* parse_function(Parser* parser);
+void parse_statement(Parser* parser, ASTNode** node);
+void parse_block(Parser* parser, ASTNode** node);
+void parse_var_declaration(Parser* parser, ASTNode** node);
+void parse_function(Parser* parser, ASTNode** node);
 
 // Error handling
 void error_at(Parser* parser, Token* token, const char* message);

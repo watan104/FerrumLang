@@ -3,6 +3,7 @@
 
 // Platform tespiti
 #if defined(_WIN32) || defined(_WIN64)
+    #define _CRT_SECURE_NO_WARNINGS
     #define FERRUM_OS_WINDOWS 1
     #ifdef _WIN64
         #define FERRUM_64BIT 1
@@ -65,12 +66,12 @@ typedef ptrdiff_t isize;
     } while (0)
 
 // Bellek yönetimi
-void* f_malloc(usize size);
-void* f_calloc(usize count, usize size);
-void* f_realloc(void* ptr, usize size);
+void* f_malloc(size_t size);
+void* f_calloc(size_t count, size_t size);
+void* f_realloc(void* ptr, size_t old_size, size_t new_size);
 void f_free(void* ptr);
-void f_memcpy(void* dest, const void* src, usize size);
-void f_memset(void* ptr, u8 value, usize size);
+void f_memcpy(void* dest, const void* src, size_t size);
+void f_memset(void* ptr, u8 value, size_t size);
 
 // Debug fonksiyonları
 FERRUM_NO_RETURN void panic(const char* fmt, ...);
@@ -94,7 +95,7 @@ void byte_buffer_append(ByteBuffer* buf, const void* data, usize size);
 void byte_buffer_append_byte(ByteBuffer* buf, u8 byte);
 
 // Dinamik dizi için basit implementasyon
-typedef struct {
+typedef struct DynamicArray {
     void* items;
     usize count;
     usize capacity;
@@ -104,5 +105,10 @@ typedef struct {
 DynamicArray da_new(usize item_size, usize initial_capacity);
 void da_free(DynamicArray* arr);
 void da_append(DynamicArray* arr, const void* item);
+void* da_get(DynamicArray* arr, usize index);
+void da_set(DynamicArray* arr, usize index, const void* item);
+void da_remove(DynamicArray* arr, usize index);
+void da_clear(DynamicArray* arr);
+void da_resize(DynamicArray* arr, usize new_capacity);
 
 #endif // FERRUM_COMMON_H

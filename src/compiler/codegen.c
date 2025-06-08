@@ -62,14 +62,80 @@ static void emit_function_epilogue(CodeGenContext* ctx) {
     emit_instruction(ctx, "  ret");
 }
 
+// Runtime support functions for concurrency
+static void emit_runtime_support(CodeGenContext* ctx) {
+    // Channel operations
+    emit_function_prologue(ctx, "rt_chan_create");
+    emit_instruction(ctx, "  mov rdi, [rsp + 16]");  // element size
+    emit_instruction(ctx, "  mov rsi, [rsp + 24]");  // buffer capacity
+    emit_instruction(ctx, "  call malloc");
+    emit_instruction(ctx, "  mov [rax], rdi");       // store element size
+    emit_instruction(ctx, "  mov [rax + 8], rsi");   // store capacity
+    emit_instruction(ctx, "  mov qword [rax + 16], 0"); // head = 0
+    emit_instruction(ctx, "  mov qword [rax + 24], 0"); // tail = 0
+    emit_instruction(ctx, "  mov qword [rax + 32], 0"); // count = 0
+    emit_function_epilogue(ctx);
+
+    emit_function_prologue(ctx, "rt_chan_send");
+    emit_instruction(ctx, "  mov rdi, [rsp + 16]");  // channel
+    emit_instruction(ctx, "  mov rsi, [rsp + 24]");  // value ptr
+    emit_instruction(ctx, "  mov rdx, [rdi]");       // element size
+    emit_instruction(ctx, "  mov rcx, [rdi + 8]");   // capacity
+    emit_instruction(ctx, "  mov r8, [rdi + 32]");   // count
+    emit_instruction(ctx, "  cmp r8, rcx");
+    emit_instruction(ctx, "  je .wait");             // if full, wait
+    emit_instruction(ctx, "  mov r9, [rdi + 24]");   // tail
+    emit_instruction(ctx, "  imul r9, rdx");         // tail * element_size
+    emit_instruction(ctx, "  add r9, rdi");
+    emit_instruction(ctx, "  add r9, 40");           // data starts at offset 40
+    emit_instruction(ctx, "  push rcx");
+    emit_instruction(ctx, "  mov rcx, rdx");
+    emit_instruction(ctx, "  rep movsb");            // copy value
+    emit_instruction(ctx, "  pop rcx");
+    emit_instruction(ctx, "  inc qword [rdi + 24]");  // tail++
+    emit_instruction(ctx, "  inc qword [rdi + 32]");  // count++
+    emit_instruction(ctx, ".done:");
+    emit_function_epilogue(ctx);
+    emit_instruction(ctx, ".wait:");
+    emit_instruction(ctx, "  pause");
+    emit_instruction(ctx, "  jmp rt_chan_send");
+
+    emit_function_prologue(ctx, "rt_chan_recv");
+    emit_instruction(ctx, "  mov rdi, [rsp + 16]");  // channel
+    emit_instruction(ctx, "  mov rsi, [rsp + 24]");  // dest ptr
+    emit_instruction(ctx, "  mov rdx, [rdi]");       // element size
+    emit_instruction(ctx, "  mov r8, [rdi + 32]");   // count
+    emit_instruction(ctx, "  test r8, r8");
+    emit_instruction(ctx, "  jz .wait");             // if empty, wait
+    emit_instruction(ctx, "  mov r9, [rdi + 16]");   // head
+    emit_instruction(ctx, "  imul r9, rdx");         // head * element_size
+    emit_instruction(ctx, "  add r9, rdi");
+    emit_instruction(ctx, "  add r9, 40");           // data starts at offset 40
+    emit_instruction(ctx, "  push rcx");
+    emit_instruction(ctx, "  mov rcx, rdx");
+    emit_instruction(ctx, "  rep movsb");            // copy value
+    emit_instruction(ctx, "  pop rcx");
+    emit_instruction(ctx, "  inc qword [rdi + 16]");  // head++
+    emit_instruction(ctx, "  dec qword [rdi + 32]");  // count--
+    emit_instruction(ctx, ".done:");
+    emit_function_epilogue(ctx);
+    emit_instruction(ctx, ".wait:");
+    emit_instruction(ctx, "  pause");
+    emit_instruction(ctx, "  jmp rt_chan_recv");
+
+    // Goroutine support
+    emit_function_prologue(ctx, "rt_go");
+    emit_instruction(ctx, "  mov rdi, [rsp + 16]");  // function ptr
+    emit_instruction(ctx, "  mov rsi, [rsp + 24]");  // argument ptr
+    emit_instruction(ctx, "  push rdi");
+    emit_instruction(ctx, "  push rsi");
+    emit_instruction(ctx, "  call CreateThread");     // Windows-specific, need to adapt for other platforms
+    emit_function_epilogue(ctx);
+}
+
 static void codegen_x86_64(CodeGenContext* ctx, ASTNode* ast) {
-    emit_text_section(ctx);
+    if (!ast) return;
     
-    // Runtime başlatma
-    emit_instruction(ctx, "global _start");
-    emit_label(ctx, "_start");
-    
-    // AST traversal
     switch (ast->type) {
         case NODE_BLOCK_STMT:
             for (usize i = 0; i < ast->block_stmt.statements.count; i++) {
@@ -106,19 +172,57 @@ static void codegen_x86_64(CodeGenContext* ctx, ASTNode* ast) {
                     panic("Unsupported binary operator");
             }
             break;
+
+        case NODE_CHAN_DECL:
+            // Allocate channel
+            emit_instruction(ctx, "  mov rdi, %d", sizeof(void*));  // element size
+            emit_instruction(ctx, "  mov rsi, %d", ast->chan_decl.capacity ? 16 : 0);  // default capacity
+            emit_instruction(ctx, "  call rt_chan_create");
+            break;
+
+        case NODE_CHAN_SEND_EXPR:
+            // Evaluate value
+            codegen_x86_64(ctx, ast->chan_send_expr.value);
+            emit_instruction(ctx, "  push rax");  // save value
+            // Get channel
+            codegen_x86_64(ctx, ast->chan_send_expr.channel);
+            emit_instruction(ctx, "  mov rdi, rax");  // channel ptr
+            emit_instruction(ctx, "  pop rsi");       // value
+            emit_instruction(ctx, "  call rt_chan_send");
+            break;
+
+        case NODE_CHAN_RECV_EXPR:
+            // Get channel
+            codegen_x86_64(ctx, ast->chan_recv_expr.channel);
+            emit_instruction(ctx, "  mov rdi, rax");  // channel ptr
+            emit_instruction(ctx, "  sub rsp, 8");    // space for result
+            emit_instruction(ctx, "  mov rsi, rsp");  // result ptr
+            emit_instruction(ctx, "  call rt_chan_recv");
+            emit_instruction(ctx, "  pop rax");       // get result
+            break;
+
+        case NODE_GO_STMT:
+            // Get function address
+            emit_instruction(ctx, "  lea rdi, [rip + %s]", "function_label");  // TODO: proper function labels
+            emit_instruction(ctx, "  mov rsi, 0");    // no arguments for now
+            emit_instruction(ctx, "  call rt_go");
+            break;
+
+        case NODE_SELECT_STMT:
+            // TODO: Implement select statement
+            panic("Select statement not yet implemented");
+            break;
             
         default:
             panic("Unsupported AST node type for codegen");
     }
-    
-    // Sistem çağrısı ile çıkış
-    emit_instruction(ctx, "  mov rax, 60");  // exit syscall
-    emit_instruction(ctx, "  mov rdi, 0");   // exit code
-    emit_instruction(ctx, "  syscall");
 }
 
 bool codegen_generate(CodeGenContext* ctx, ASTNode* ast, const char* output_path) {
     if (!ast) return false;
+    
+    emit_text_section(ctx);
+    emit_runtime_support(ctx);
     
     switch (ctx->arch) {
         case TARGET_X86_64:
@@ -132,7 +236,7 @@ bool codegen_generate(CodeGenContext* ctx, ASTNode* ast, const char* output_path
             return false;
     }
     
-    // Çıktıyı dosyaya yaz
+    // Write output to file
     FILE* out = fopen(output_path, "wb");
     if (!out) {
         panic("Cannot open output file: %s", output_path);
