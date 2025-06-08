@@ -220,3 +220,46 @@ ASTNode* ast_new_expr_stmt(ASTNode* expr) {
     node->expr_stmt.expr = expr;
     return node;
 }
+
+ASTNode* ast_new_chan_send_expr(ASTNode* channel, ASTNode* value) {
+    ASTNode* node = ast_new_node(NODE_CHAN_SEND_EXPR, channel->line, channel->column);
+    node->chan_send_expr.channel = channel;
+    node->chan_send_expr.value = value;
+    return node;
+}
+
+ASTNode* ast_new_chan_recv_expr(ASTNode* channel) {
+    ASTNode* node = ast_new_node(NODE_CHAN_RECV_EXPR, channel->line, channel->column);
+    node->chan_recv_expr.channel = channel;
+    return node;
+}
+
+ASTNode* ast_new_chan_decl(Token name, ASTNode* element_type, ASTNode* capacity) {
+    ASTNode* node = ast_new_node(NODE_CHAN_DECL, name.line, name.col);
+    node->chan_decl.name = name;
+    node->chan_decl.element_type = element_type;
+    node->chan_decl.capacity = capacity;
+    return node;
+}
+
+ASTNode* ast_new_go_stmt(ASTNode* expression) {
+    ASTNode* node = ast_new_node(NODE_GO_STMT, expression->line, expression->column);
+    node->go_stmt.expression = expression;
+    return node;
+}
+
+ASTNode* ast_new_select_case(ASTNode* channel, ASTNode* value, bool is_send, ASTNode* body) {
+    SelectCase* case_node = malloc(sizeof(SelectCase));
+    case_node->channel = channel;
+    case_node->value = value;
+    case_node->is_send = is_send;
+    case_node->body = body;
+    return case_node;
+}
+
+ASTNode* ast_new_select_stmt(DynamicArray cases, ASTNode* default_case) {
+    ASTNode* node = ast_new_node(NODE_SELECT_STMT, 0, 0); // Line and column will be set by parser
+    node->select_stmt.cases = cases;
+    node->select_stmt.default_case = default_case;
+    return node;
+}

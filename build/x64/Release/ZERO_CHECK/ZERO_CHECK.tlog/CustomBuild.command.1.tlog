@@ -1,0 +1,10 @@
+^D:\FERRUM\FERRUMLANG\BUILD\CMAKEFILES\2B9F8383BE23B8FAE119EEAD623DF626\GENERATE.STAMP.RULE
+setlocal
+"C:\Program Files\CMake\bin\cmake.exe" -SD:/Ferrum/FerrumLang -BD:/Ferrum/FerrumLang/build --check-stamp-list CMakeFiles/generate.stamp.list --vs-solution-file D:/Ferrum/FerrumLang/build/Ferrum.sln
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal & call :cmErrorLevel %errorlevel% & goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd

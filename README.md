@@ -1,8 +1,60 @@
 # Ferrum Programming Language
 
-Ferrum is a small, experimental programming language implemented in C. It's currently in early development and **not yet functional**, but it aims to grow into a simple and expressive language inspired by Rust, Go, and other modern systems languages.
+Ferrum, Rust ve Go'dan esinlenen, sistem programlama için tasarlanmış bir programlama dilidir. Dil, güvenli bellek yönetimi ve eşzamanlı programlama özelliklerine odaklanır.
 
-This project is being shared as open-source so others can learn from, build upon, or contribute to its development.
+## Özellikler
+
+- Güvenli bellek yönetimi
+- Goroutine benzeri eşzamanlı programlama desteği
+- Kanal tabanlı iletişim
+- Select ifadesi ile çoklu kanal işlemleri
+- Platform bağımsız I/O operasyonları
+- Thread-safe hata yönetimi
+
+## Yapı Durumu
+
+Proje şu anda aktif geliştirme aşamasındadır. Bazı temel bileşenler çalışır durumdadır ancak dil henüz production kullanımına hazır değildir.
+
+### Bilinen Sorunlar
+
+1. Windows platformunda bazı güvenlik uyarıları (`strcpy` ve `strncpy` fonksiyonları için)
+2. Thread ve Mutex yapılarıyla ilgili tanımlama sorunları
+3. Bellek yönetimi fonksiyonlarında iyileştirmeler gerekiyor
+
+### Yapılacaklar
+
+- [ ] Windows güvenlik uyarılarının çözülmesi
+- [ ] Thread ve Mutex yapılarının platform bağımsız implementasyonunun iyileştirilmesi
+- [ ] Bellek yönetimi fonksiyonlarının güvenlik kontrollerinin artırılması
+- [ ] Test coverage'ın artırılması
+- [ ] Dökümantasyonun genişletilmesi
+
+## Kurulum
+
+```bash
+git clone https://github.com/yourusername/FerrumLang.git
+cd FerrumLang
+cmake -B build
+cmake --build build --config Release
+```
+
+## Katkıda Bulunma
+
+Projeye katkıda bulunmak isteyenler için:
+
+1. Repository'yi fork edin
+2. Feature branch oluşturun (`git checkout -b feature/amazing-feature`)
+3. Değişikliklerinizi commit edin (`git commit -m 'Add some amazing feature'`)
+4. Branch'inizi push edin (`git push origin feature/amazing-feature`)
+5. Pull Request açın
+
+## Lisans
+
+[Lisans bilgisi eklenecek]
+
+## İletişim
+
+[İletişim bilgileri eklenecek]
 
 ---
 

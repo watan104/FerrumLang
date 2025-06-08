@@ -1,78 +1,147 @@
-#include "io.h"
-#include "../../include/common.h"
+#include "../../include/runtime/io.h"
+#include "../../include/runtime/memory.h"
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 
+// Standard streams
+static FileHandle stdin_handle = {NULL, "stdin", IO_READ};
+static FileHandle stdout_handle = {NULL, "stdout", IO_WRITE};
+static FileHandle stderr_handle = {NULL, "stderr", IO_WRITE};
 
-#ifdef FERRUM_OS_WINDOWS
-#include <windows.h>
-#else
-#include <fcntl.h>
-#include <unistd.h>
-#endif
+void io_init(void) {
+    stdin_handle.handle = stdin;
+    stdout_handle.handle = stdout;
+    stderr_handle.handle = stderr;
+}
 
-FerrumFile ferrum_file_open(const char* path, uint8_t flags) {
-    FerrumFile file = { .fd = -1, .is_open = false };
-    
-#ifdef FERRUM_OS_WINDOWS
-    DWORD access = 0;
-    DWORD disposition = OPEN_EXISTING;
-    
-    if (flags & FR_WRITE) access |= GENERIC_WRITE;
-    if (flags & FR_READ) access |= GENERIC_READ;
-    
-    if (flags & FR_CREATE) {
-        disposition = (flags & FR_TRUNC) ? CREATE_ALWAYS : OPEN_ALWAYS;
-    } else if (flags & FR_TRUNC) {
-        disposition = TRUNCATE_EXISTING;
+void io_cleanup(void) {
+    // Close all open files except standard streams
+}
+
+FileHandle* io_open(const char* path, IOMode mode) {
+    const char* mode_str;
+    switch (mode) {
+        case IO_READ: mode_str = "rb"; break;
+        case IO_WRITE: mode_str = "wb"; break;
+        case IO_APPEND: mode_str = "ab"; break;
+        case IO_READ_WRITE: mode_str = "r+b"; break;
+        default: return NULL;
     }
-    
-    HANDLE h = CreateFileA(path, access, 0, NULL, disposition, FILE_ATTRIBUTE_NORMAL, NULL);
-    if (h != INVALID_HANDLE_VALUE) {
-        file.fd = _open_osfhandle((intptr_t)h, 0);
-        file.is_open = (file.fd != -1);
+
+    FILE* file = fopen(path, mode_str);
+    if (!file) return NULL;
+
+    FileHandle* handle = f_malloc(sizeof(FileHandle));
+    if (!handle) {
+        fclose(file);
+        return NULL;
     }
-#else
-    int posix_flags = 0;
-    
-    if ((flags & FR_WRITE) && (flags & FR_READ)) posix_flags |= O_RDWR;
-    else if (flags & FR_WRITE) posix_flags |= O_WRONLY;
-    else posix_flags |= O_RDONLY;
-    
-    if (flags & FR_CREATE) posix_flags |= O_CREAT;
-    if (flags & FR_TRUNC) posix_flags |= O_TRUNC;
-    if (flags & FR_APPEND) posix_flags |= O_APPEND;
-    
-    file.fd = open(path, posix_flags, 0644);
-    file.is_open = (file.fd != -1);
-#endif
-    
-    return file;
-}
 
-void ferrum_file_close(FerrumFile* file) {
-    if (file->is_open) {
-#ifdef FERRUM_OS_WINDOWS
-        _close(file->fd);
-#else
-        close(file->fd);
-#endif
-        file->is_open = false;
+    handle->path = f_malloc(strlen(path) + 1);
+    if (!handle->path) {
+        fclose(file);
+        f_free(handle);
+        return NULL;
     }
+
+    strcpy(handle->path, path);
+    handle->handle = file;
+    handle->mode = mode;
+
+    return handle;
 }
 
-size_t ferrum_file_read(FerrumFile* file, void* buf, size_t count) {
-    if (!file->is_open) return 0;
-#ifdef FERRUM_OS_WINDOWS
-    return _read(file->fd, buf, (unsigned int)count);
-#else
-    return read(file->fd, buf, count);
-#endif
+void io_close(FileHandle* handle) {
+    if (!handle) return;
+    if (handle->handle && handle->handle != stdin && 
+        handle->handle != stdout && handle->handle != stderr) {
+        fclose(handle->handle);
+    }
+    f_free(handle->path);
+    f_free(handle);
 }
 
-size_t ferrum_file_write(FerrumFile* file, const void* buf, size_t count) {
-    if (!file->is_open) return 0;
-#ifdef FERRUM_OS_WINDOWS
-    return _write(file->fd, buf, (unsigned int)count);
-#else
-    return write(file->fd, buf, count);
-#endif
+size_t io_read(FileHandle* handle, void* buffer, size_t size) {
+    if (!handle || !handle->handle || !(handle->mode & IO_READ)) return 0;
+    return fread(buffer, 1, size, handle->handle);
 }
+
+size_t io_write(FileHandle* handle, const void* buffer, size_t size) {
+    if (!handle || !handle->handle || !(handle->mode & IO_WRITE)) return 0;
+    return fwrite(buffer, 1, size, handle->handle);
+}
+
+bool io_seek(FileHandle* handle, long offset, IOSeek origin) {
+    if (!handle || !handle->handle) return false;
+
+    int whence;
+    switch (origin) {
+        case IO_SEEK_START: whence = SEEK_SET; break;
+        case IO_SEEK_CURRENT: whence = SEEK_CUR; break;
+        case IO_SEEK_END: whence = SEEK_END; break;
+        default: return false;
+    }
+
+    return fseek(handle->handle, offset, whence) == 0;
+}
+
+long io_tell(FileHandle* handle) {
+    if (!handle || !handle->handle) return -1;
+    return ftell(handle->handle);
+}
+
+bool io_flush(FileHandle* handle) {
+    if (!handle || !handle->handle) return false;
+    return fflush(handle->handle) == 0;
+}
+
+// String I/O functions
+char* io_read_line(FileHandle* handle) {
+    if (!handle || !handle->handle || !(handle->mode & IO_READ)) return NULL;
+
+    size_t capacity = 128;
+    size_t size = 0;
+    char* buffer = f_malloc(capacity);
+    if (!buffer) return NULL;
+
+    int c;
+    while ((c = fgetc(handle->handle)) != EOF) {
+        if (size + 1 >= capacity) {
+            size_t new_capacity = capacity * 2;
+            char* new_buffer = f_realloc(buffer, capacity, new_capacity);
+            if (!new_buffer) {
+                f_free(buffer);
+                return NULL;
+            }
+            buffer = new_buffer;
+            capacity = new_capacity;
+        }
+
+        buffer[size++] = (char)c;
+        if (c == '\n') break;
+    }
+
+    if (size == 0 && c == EOF) {
+        f_free(buffer);
+        return NULL;
+    }
+
+    buffer[size] = '\0';
+    return buffer;
+}
+
+bool io_write_line(FileHandle* handle, const char* str) {
+    if (!handle || !handle->handle || !(handle->mode & IO_WRITE)) return false;
+    
+    size_t len = strlen(str);
+    if (io_write(handle, str, len) != len) return false;
+    if (io_write(handle, "\n", 1) != 1) return false;
+    
+    return true;
+}
+
+// Standard stream accessors
+FileHandle* io_stdin(void) { return &stdin_handle; }
+FileHandle* io_stdout(void) { return &stdout_handle; }
+FileHandle* io_stderr(void) { return &stderr_handle; }
