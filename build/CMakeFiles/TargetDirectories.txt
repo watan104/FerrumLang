@@ -1,5 +1,0 @@
-D:/Ferrum/FerrumLang/build/CMakeFiles/runtime.dir
-D:/Ferrum/FerrumLang/build/CMakeFiles/ferrumc.dir
-D:/Ferrum/FerrumLang/build/CMakeFiles/INSTALL.dir
-D:/Ferrum/FerrumLang/build/CMakeFiles/ALL_BUILD.dir
-D:/Ferrum/FerrumLang/build/CMakeFiles/ZERO_CHECK.dir
